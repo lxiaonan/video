@@ -247,7 +247,7 @@
 
     .frame-grid {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: minmax(0, 1fr);
       gap: 14px;
     }
 
@@ -606,7 +606,7 @@
       <div>
         <div class="brand-kicker"><span class="brand-mark">S2</span><span>Browser native video generation</span></div>
         <h1>Seedance Video Console</h1>
-        <p class="subtitle">输入 API 地址和 Key 后先查询可用模型，再选择模型、上传首尾帧并输入提示词生成视频；生成结果会写入浏览器 IndexedDB，并可随时下载。</p>
+        <p class="subtitle">输入 API 地址和 Key 后先查询可用模型，再选择模型、上传一张参考图片并输入提示词生成视频；生成结果会写入浏览器 IndexedDB，并可随时下载。</p>
       </div>
       <div class="status-pill" id="runtimeStatus">
         <strong>Ready</strong>
@@ -697,7 +697,7 @@
 
           <div class="field">
             <label for="prompt">提示词</label>
-            <textarea id="prompt" placeholder="例如：从首帧自然过渡到尾帧，镜头缓慢推进，主体动作连贯，光影保持一致。">从第一张画面平滑过渡到第二张画面，镜头自然移动，主体动作连贯，光影保持一致。</textarea>
+            <textarea id="prompt" placeholder="例如：根据参考图片生成视频，镜头缓慢推进，主体动作自然，光影保持一致。">根据参考图片生成视频，镜头自然移动，主体动作连贯，光影保持一致。</textarea>
           </div>
 
           <div class="switch-row">
@@ -709,18 +709,10 @@
           <div class="frame-grid">
             <section class="dropzone" data-frame="first">
               <input class="file-input" id="firstInput" type="file" accept="image/*">
-              <div class="preview" id="firstPreview"><div class="empty-preview">START FRAME</div></div>
+              <div class="preview" id="firstPreview"><div class="empty-preview">REFERENCE IMAGE</div></div>
               <div class="drop-actions">
-                <div class="file-meta" id="firstMeta">首帧图片未选择</div>
-                <button class="button" data-pick="first" type="button">选择首帧</button>
-              </div>
-            </section>
-            <section class="dropzone" data-frame="last">
-              <input class="file-input" id="lastInput" type="file" accept="image/*">
-              <div class="preview" id="lastPreview"><div class="empty-preview">END FRAME</div></div>
-              <div class="drop-actions">
-                <div class="file-meta" id="lastMeta">尾帧图片未选择</div>
-                <button class="button" data-pick="last" type="button">选择尾帧</button>
+                <div class="file-meta" id="firstMeta">参考图片未选择</div>
+                <button class="button" data-pick="first" type="button">选择图片</button>
               </div>
             </section>
           </div>
@@ -793,9 +785,7 @@
 
     const state = {
       firstFrame: null,
-      lastFrame: null,
       firstMeta: null,
-      lastMeta: null,
       pollTimer: null,
       pollCount: 0,
       activeTaskId: '',
@@ -821,11 +811,8 @@
       generateAudio: $('generateAudio'),
       autoDownload: $('autoDownload'),
       firstInput: $('firstInput'),
-      lastInput: $('lastInput'),
       firstPreview: $('firstPreview'),
-      lastPreview: $('lastPreview'),
       firstMeta: $('firstMeta'),
-      lastMeta: $('lastMeta'),
       checkModelsBtn: $('checkModelsBtn'),
       saveSettingsBtn: $('saveSettingsBtn'),
       generateBtn: $('generateBtn'),
@@ -960,13 +947,8 @@
         if (frame === 'first') {
           state.firstFrame = dataUrl;
           state.firstMeta = meta;
-          els.firstPreview.innerHTML = `<img src="${dataUrl}" alt="首帧预览">`;
+          els.firstPreview.innerHTML = `<img src="${dataUrl}" alt="参考图片预览">`;
           els.firstMeta.textContent = `${file.name} · ${formatBytes(file.size)}`;
-        } else {
-          state.lastFrame = dataUrl;
-          state.lastMeta = meta;
-          els.lastPreview.innerHTML = `<img src="${dataUrl}" alt="尾帧预览">`;
-          els.lastMeta.textContent = `${file.name} · ${formatBytes(file.size)}`;
         }
         setError('');
       };
@@ -977,13 +959,11 @@
     function setupDropzones() {
       document.querySelectorAll('[data-pick]').forEach((button) => {
         button.addEventListener('click', () => {
-          const target = button.dataset.pick === 'first' ? els.firstInput : els.lastInput;
-          target.click();
+          els.firstInput.click();
         });
       });
 
       els.firstInput.addEventListener('change', () => readImage(els.firstInput.files[0], 'first'));
-      els.lastInput.addEventListener('change', () => readImage(els.lastInput.files[0], 'last'));
 
       document.querySelectorAll('.dropzone').forEach((zone) => {
         const frame = zone.dataset.frame;
@@ -1005,8 +985,7 @@
       if (useProxy() && !cleanProxyUrl()) return '请填写代理地址。GitHub Pages 直连该 API 会被 CORS 拦截。';
       if (!els.apiKey.value.trim()) return '请填写 API key。';
       if (!els.prompt.value.trim()) return '请填写提示词。';
-      if (!state.firstFrame) return '请上传首帧图片。';
-      if (!state.lastFrame) return '请上传尾帧图片。';
+      if (!state.firstFrame) return '请上传参考图片。';
       return '';
     }
 
@@ -1148,7 +1127,6 @@
         duration: Number(els.duration.value),
         aspect_ratio: els.aspectRatio.value,
         first_frame: state.firstFrame,
-        last_frame: state.lastFrame,
         generate_audio: els.generateAudio.checked
       };
 
