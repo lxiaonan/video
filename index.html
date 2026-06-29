@@ -622,6 +622,7 @@
             <p class="panel-note">适合直接部署到 GitHub Pages 的单文件页面。</p>
           </div>
           <div class="toolbar">
+            <button class="button ghost" id="testProxyBtn" type="button">测试代理</button>
             <button class="button ghost" id="checkModelsBtn" type="button">检查模型</button>
             <button class="button ghost" id="saveSettingsBtn" type="button">保存配置</button>
           </div>
@@ -646,7 +647,7 @@
           <div class="grid-2">
             <div class="field">
               <label for="proxyUrl">代理地址</label>
-              <input class="control" id="proxyUrl" value="https://seedance-video-proxy.lxiaonan-video.workers.dev" placeholder="https://your-worker.your-subdomain.workers.dev" autocomplete="off">
+              <input class="control" id="proxyUrl" value="https://seedance-video-proxy.lxiaonan-video.workers.dev" placeholder="/proxy 或 https://your-worker.your-subdomain.workers.dev" autocomplete="off">
               <div class="fineprint">GitHub Pages 访问带 Authorization 的第三方 API 时通常会被 CORS 拦截；部署仓库里的 Cloudflare Worker 后，把地址填到这里。</div>
             </div>
             <div class="field">
@@ -813,6 +814,7 @@
       firstInput: $('firstInput'),
       firstPreview: $('firstPreview'),
       firstMeta: $('firstMeta'),
+      testProxyBtn: $('testProxyBtn'),
       checkModelsBtn: $('checkModelsBtn'),
       saveSettingsBtn: $('saveSettingsBtn'),
       generateBtn: $('generateBtn'),
@@ -857,7 +859,9 @@
     }
 
     function cleanProxyUrl() {
-      return els.proxyUrl.value.trim().replace(/\/+$/, '');
+      const value = els.proxyUrl.value.trim();
+      if (value === '/proxy') return value;
+      return value.replace(/\/+$/, '');
     }
 
     function useProxy() {
@@ -873,6 +877,12 @@
       }
       if (absoluteUrl) return absoluteUrl;
       return `${cleanBaseUrl()}${path}`;
+    }
+
+    function applyRuntimeDefaults() {
+      if (location.hostname.endsWith('.pages.dev')) {
+        els.proxyUrl.value = '/proxy';
+      }
     }
 
     function authHeaders(json = true) {
@@ -1053,11 +1063,34 @@
     function handleNetworkError(error) {
       const message = error && error.message ? error.message : String(error);
       const corsHint = message.includes('Failed to fetch')
-        ? '请求失败，常见原因是 CORS 未开放、网络不可达或浏览器拦截。'
+        ? `请求失败。若当前是代理模式，请先在浏览器单独打开代理地址确认能访问：${cleanProxyUrl() || '未填写代理地址'}。常见原因是 workers.dev 在当前网络不可达、CORS 未开放或浏览器拦截。`
         : message;
       setError(corsHint);
       setRuntime('Request failed', corsHint);
       log('请求失败。', corsHint);
+      els.logBox.textContent = els.logBox.textContent.replace('等待操作...', '请求已失败，请查看上方红色错误提示。');
+    }
+
+    async function testProxy() {
+      setError('');
+      if (!cleanProxyUrl()) {
+        setError('请先填写代理地址。');
+        return;
+      }
+      setRuntime('Testing proxy', '正在测试代理域名...');
+      log('开始测试代理。');
+      try {
+        const response = await fetch(`${cleanProxyUrl()}/?url=${encodeURIComponent('https://ai.silkroadai.io/v1/models')}`, {
+          headers: els.apiKey.value.trim() ? authHeaders(false) : {}
+        });
+        const body = await parseJsonResponse(response);
+        if (!response.ok) throw new Error(readableError(body, response.status));
+        const models = extractIds(body);
+        log(`代理测试成功，共读取 ${models.length} 个模型。`, models.slice(0, 12));
+        setRuntime('Proxy ready', `代理可用，读取到 ${models.length} 个模型。`);
+      } catch (error) {
+        handleNetworkError(error);
+      }
     }
 
     function extractTaskId(body) {
@@ -1379,6 +1412,7 @@
         els.toggleKeyBtn.textContent = els.apiKey.type === 'password' ? 'eye' : 'hide';
       });
       els.saveSettingsBtn.addEventListener('click', saveSettings);
+      els.testProxyBtn.addEventListener('click', testProxy);
       els.checkModelsBtn.addEventListener('click', checkModels);
       els.generateBtn.addEventListener('click', generateVideo);
       els.clearHistoryBtn.addEventListener('click', clearHistory);
@@ -1391,6 +1425,7 @@
     }
 
     loadSettings();
+    applyRuntimeDefaults();
     setupDropzones();
     setupEvents();
     renderHistory();
