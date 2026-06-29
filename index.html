@@ -635,6 +635,21 @@
               <input class="control" id="baseUrl" value="https://ai.silkroadai.io/v1" autocomplete="off">
             </div>
             <div class="field">
+              <label for="connectionMode">连接模式</label>
+              <select id="connectionMode">
+                <option value="proxy" selected>代理模式（GitHub Pages 推荐）</option>
+                <option value="direct">直连模式（API 已开启 CORS 时使用）</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <div class="field">
+              <label for="proxyUrl">代理地址</label>
+              <input class="control" id="proxyUrl" placeholder="https://your-worker.your-subdomain.workers.dev" autocomplete="off">
+              <div class="fineprint">GitHub Pages 访问带 Authorization 的第三方 API 时通常会被 CORS 拦截；部署仓库里的 Cloudflare Worker 后，把地址填到这里。</div>
+            </div>
+            <div class="field">
               <label for="apiKey">API Key</label>
               <div class="secret-row">
                 <input class="control" id="apiKey" type="password" placeholder="sk-..." autocomplete="off">
@@ -794,6 +809,8 @@
       runtimeStatus: $('runtimeStatus'),
       errorBox: $('errorBox'),
       baseUrl: $('baseUrl'),
+      connectionMode: $('connectionMode'),
+      proxyUrl: $('proxyUrl'),
       apiKey: $('apiKey'),
       toggleKeyBtn: $('toggleKeyBtn'),
       model: $('model'),
@@ -852,6 +869,25 @@
       return els.baseUrl.value.trim().replace(/\/+$/, '');
     }
 
+    function cleanProxyUrl() {
+      return els.proxyUrl.value.trim().replace(/\/+$/, '');
+    }
+
+    function useProxy() {
+      return els.connectionMode.value === 'proxy';
+    }
+
+    function apiUrl(path, absoluteUrl = '') {
+      if (useProxy()) {
+        const proxy = cleanProxyUrl();
+        if (!proxy) throw new Error('请先填写代理地址。GitHub Pages 直连该 API 会被 CORS 拦截。');
+        const target = absoluteUrl || `${cleanBaseUrl()}${path}`;
+        return `${proxy}/?url=${encodeURIComponent(target)}`;
+      }
+      if (absoluteUrl) return absoluteUrl;
+      return `${cleanBaseUrl()}${path}`;
+    }
+
     function authHeaders(json = true) {
       const key = els.apiKey.value.trim();
       const headers = { Authorization: `Bearer ${key}` };
@@ -862,6 +898,8 @@
     function saveSettings() {
       const settings = {
         baseUrl: els.baseUrl.value.trim(),
+        connectionMode: els.connectionMode.value,
+        proxyUrl: els.proxyUrl.value.trim(),
         model: els.model.value,
         duration: els.duration.value,
         aspectRatio: els.aspectRatio.value,
@@ -882,6 +920,8 @@
         if (!raw) return;
         const settings = JSON.parse(raw);
         els.baseUrl.value = settings.baseUrl || els.baseUrl.value;
+        els.connectionMode.value = settings.connectionMode || els.connectionMode.value;
+        els.proxyUrl.value = settings.proxyUrl || '';
         els.model.value = settings.model || els.model.value;
         els.duration.value = settings.duration || els.duration.value;
         els.aspectRatio.value = settings.aspectRatio || els.aspectRatio.value;
@@ -962,6 +1002,7 @@
 
     function validateForm() {
       if (!cleanBaseUrl()) return '请填写 API Base URL。';
+      if (useProxy() && !cleanProxyUrl()) return '请填写代理地址。GitHub Pages 直连该 API 会被 CORS 拦截。';
       if (!els.apiKey.value.trim()) return '请填写 API key。';
       if (!els.prompt.value.trim()) return '请填写提示词。';
       if (!state.firstFrame) return '请上传首帧图片。';
@@ -995,10 +1036,14 @@
         setError('检查模型前需要填写 API Base URL 和 API key。');
         return;
       }
+      if (useProxy() && !cleanProxyUrl()) {
+        setError('当前是代理模式，请先填写代理地址。仓库已提供 Cloudflare Worker 代理文件。');
+        return;
+      }
       setRuntime('Checking models', '正在读取 /models...');
       log('开始检查模型列表。');
       try {
-        const response = await fetch(`${cleanBaseUrl()}/models`, { headers: authHeaders(false) });
+        const response = await fetch(apiUrl('/models'), { headers: authHeaders(false) });
         const body = await parseJsonResponse(response);
         if (!response.ok) throw new Error(readableError(body, response.status));
         const models = extractIds(body);
@@ -1108,7 +1153,7 @@
       };
 
       try {
-        const response = await fetch(`${cleanBaseUrl()}/video/generations`, {
+        const response = await fetch(apiUrl('/video/generations'), {
           method: 'POST',
           headers: authHeaders(true),
           body: JSON.stringify(payload)
@@ -1133,7 +1178,7 @@
       if (!state.activeTaskId) return;
       state.pollCount += 1;
       try {
-        const response = await fetch(`${cleanBaseUrl()}/video/generations/${encodeURIComponent(state.activeTaskId)}`, {
+        const response = await fetch(apiUrl(`/video/generations/${encodeURIComponent(state.activeTaskId)}`), {
           headers: authHeaders(false)
         });
         const body = await parseJsonResponse(response);
@@ -1173,7 +1218,7 @@
       setRuntime('Downloading', '正在把视频写入本地浏览器...');
       log('任务成功，开始下载视频。', videoUrl);
 
-      const response = await fetch(videoUrl);
+      const response = await fetch(apiUrl('', videoUrl), { headers: useProxy() ? authHeaders(false) : undefined });
       if (!response.ok) throw new Error(`视频下载失败：HTTP ${response.status}`);
       const blob = await response.blob();
       const fileName = `seedance-${Date.now()}.mp4`;
