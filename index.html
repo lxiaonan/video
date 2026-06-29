@@ -647,7 +647,7 @@
           <div class="grid-2">
             <div class="field">
               <label for="proxyUrl">代理地址</label>
-              <input class="control" id="proxyUrl" value="https://seedance-video-proxy.lxiaonan-video.workers.dev" placeholder="https://your-worker.your-subdomain.workers.dev" autocomplete="off">
+              <input class="control" id="proxyUrl" value="https://seedance-video-proxy.lxiaonan-video.workers.dev" placeholder="/proxy 或 https://your-worker.your-subdomain.workers.dev" autocomplete="off">
               <div class="fineprint">GitHub Pages 访问带 Authorization 的第三方 API 时通常会被 CORS 拦截；部署仓库里的 Cloudflare Worker 后，把地址填到这里。</div>
             </div>
             <div class="field">
@@ -859,7 +859,9 @@
     }
 
     function cleanProxyUrl() {
-      return els.proxyUrl.value.trim().replace(/\/+$/, '');
+      const value = els.proxyUrl.value.trim();
+      if (value === '/proxy') return value;
+      return value.replace(/\/+$/, '');
     }
 
     function useProxy() {
@@ -875,6 +877,12 @@
       }
       if (absoluteUrl) return absoluteUrl;
       return `${cleanBaseUrl()}${path}`;
+    }
+
+    function applyRuntimeDefaults() {
+      if (location.hostname.endsWith('.pages.dev')) {
+        els.proxyUrl.value = '/proxy';
+      }
     }
 
     function authHeaders(json = true) {
@@ -1417,6 +1425,7 @@
     }
 
     loadSettings();
+    applyRuntimeDefaults();
     setupDropzones();
     setupEvents();
     renderHistory();
