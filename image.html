@@ -1,0 +1,1048 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Elucid Image Console</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --ink: #f7f2e9;
+      --muted: #b9b1a4;
+      --dim: #817a70;
+      --paper: #141416;
+      --panel: #20201f;
+      --panel-2: #292722;
+      --line: #3f3a32;
+      --gold: #f2bd55;
+      --rose: #e87566;
+      --green: #6cc39a;
+      --blue: #8fb6d9;
+      --shadow: 0 24px 70px rgba(0,0,0,.34);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      min-height: 100vh;
+      margin: 0;
+      color: var(--ink);
+      font-family: ui-serif, Georgia, Cambria, "Times New Roman", serif;
+      background:
+        linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px) 0 0 / 40px 40px,
+        linear-gradient(180deg, rgba(255,255,255,.022) 1px, transparent 1px) 0 0 / 40px 40px,
+        radial-gradient(circle at 16% 16%, rgba(232,117,102,.17), transparent 34rem),
+        radial-gradient(circle at 82% 4%, rgba(108,195,154,.16), transparent 32rem),
+        #131312;
+    }
+
+    button, input, select, textarea { font: inherit; }
+    button { cursor: pointer; border: 0; }
+    button:disabled { cursor: not-allowed; opacity: .52; }
+
+    .app {
+      width: min(1480px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 24px 0 44px;
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 18px;
+      align-items: end;
+      padding-bottom: 22px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .kicker {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--gold);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    .mark {
+      width: 32px;
+      height: 32px;
+      display: grid;
+      place-items: center;
+      border-radius: 6px;
+      color: #15110a;
+      background: var(--gold);
+      font-weight: 900;
+    }
+
+    h1 {
+      margin: 12px 0 0;
+      max-width: 980px;
+      font-size: clamp(42px, 7vw, 86px);
+      line-height: .88;
+      letter-spacing: 0;
+    }
+
+    .subtitle {
+      max-width: 720px;
+      margin: 14px 0 0;
+      color: var(--muted);
+      font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 15px;
+      line-height: 1.65;
+    }
+
+    .nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+
+    .button, .nav a {
+      min-height: 42px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 10px 14px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      color: var(--ink);
+      background: var(--panel-2);
+      text-decoration: none;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+      transition: transform .18s ease, border-color .18s ease, background .18s ease;
+    }
+
+    .button:hover:not(:disabled), .nav a:hover {
+      transform: translateY(-1px);
+      border-color: #746a57;
+      background: #332f27;
+    }
+
+    .button.primary {
+      color: #17120a;
+      border-color: var(--gold);
+      background: var(--gold);
+      font-weight: 900;
+    }
+
+    .button.ghost { background: transparent; }
+    .button.danger {
+      color: #ffe8e3;
+      border-color: rgba(232,117,102,.55);
+      background: rgba(232,117,102,.16);
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(390px, .78fr);
+      gap: 18px;
+      margin-top: 18px;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(32,32,31,.88);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255,255,255,.025);
+    }
+
+    .panel-title {
+      margin: 0;
+      font-size: 20px;
+      line-height: 1.1;
+    }
+
+    .panel-note {
+      margin: 5px 0 0;
+      color: var(--dim);
+      font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 12px;
+    }
+
+    .panel-body {
+      padding: 18px;
+    }
+
+    .stack { display: grid; gap: 15px; }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .field { display: grid; gap: 8px; }
+    label, .field-title {
+      color: var(--muted);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+    }
+
+    .control, select, textarea {
+      width: 100%;
+      min-height: 44px;
+      padding: 11px 12px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      color: var(--ink);
+      background: #10100f;
+      outline: none;
+    }
+
+    textarea {
+      min-height: 150px;
+      resize: vertical;
+      line-height: 1.55;
+      font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .control:focus, select:focus, textarea:focus {
+      border-color: var(--gold);
+      box-shadow: 0 0 0 3px rgba(242,189,85,.14);
+    }
+
+    .secret-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+    }
+
+    .toggle {
+      width: 46px;
+      min-height: 44px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      color: var(--muted);
+      background: #10100f;
+    }
+
+    .mode-row, .toolbar, .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .mode-button {
+      min-height: 38px;
+      padding: 8px 12px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--muted);
+      background: #11110f;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+    }
+
+    .mode-button.active {
+      color: #181008;
+      border-color: var(--gold);
+      background: var(--gold);
+      font-weight: 900;
+    }
+
+    .chip {
+      padding: 7px 10px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--muted);
+      background: #11110f;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 11px;
+    }
+
+    .chip.good { color: #d8ffe9; border-color: rgba(108,195,154,.55); }
+    .chip.bad { color: #ffd9d3; border-color: rgba(232,117,102,.55); }
+
+    .fineprint {
+      color: var(--dim);
+      font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .dropzone {
+      position: relative;
+      min-height: 260px;
+      display: grid;
+      grid-template-rows: minmax(0, 1fr) auto;
+      gap: 12px;
+      padding: 12px;
+      border: 1px dashed #5c5548;
+      border-radius: 8px;
+      background: #10100f;
+    }
+
+    .dropzone.disabled {
+      filter: grayscale(.7);
+      opacity: .58;
+      pointer-events: none;
+    }
+
+    .preview {
+      min-height: 190px;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      border-radius: 6px;
+      background:
+        linear-gradient(45deg, rgba(255,255,255,.05) 25%, transparent 25% 75%, rgba(255,255,255,.05) 75%) 0 0 / 22px 22px,
+        #171715;
+    }
+
+    .preview img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+
+    .empty-preview {
+      width: 78%;
+      max-width: 280px;
+      aspect-ratio: 1 / 1;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--line);
+      color: var(--dim);
+      background: rgba(255,255,255,.02);
+      text-align: center;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+    }
+
+    .drop-actions {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .file-meta {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--dim);
+      font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 12px;
+    }
+
+    .file-input {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .alert {
+      display: none;
+      padding: 12px;
+      border: 1px solid rgba(232,117,102,.55);
+      border-radius: 7px;
+      color: #ffd9d3;
+      background: rgba(232,117,102,.13);
+      font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .alert.show { display: block; }
+
+    .log {
+      height: 220px;
+      overflow: auto;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #0e0e0d;
+      color: #d8d0c0;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+    }
+
+    .result-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 12px;
+    }
+
+    .result-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      background: #10100f;
+    }
+
+    .result-card img {
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      object-fit: cover;
+      display: block;
+      background: #080807;
+    }
+
+    .result-actions {
+      display: flex;
+      gap: 8px;
+      padding: 9px;
+    }
+
+    .model-list {
+      display: grid;
+      gap: 9px;
+      max-height: 410px;
+      overflow: auto;
+    }
+
+    .model-item {
+      display: grid;
+      gap: 7px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #11110f;
+    }
+
+    .model-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--ink);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+    }
+
+    @media (max-width: 1040px) {
+      .topbar, .layout { grid-template-columns: 1fr; }
+      .nav { justify-content: flex-start; }
+    }
+
+    @media (max-width: 720px) {
+      .app { width: min(100% - 22px, 1480px); padding-top: 14px; }
+      .grid-2, .secret-row { grid-template-columns: 1fr; }
+      .panel-head { flex-direction: column; align-items: flex-start; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div>
+        <div class="kicker"><span class="mark">IMG</span><span>Elucid image generation</span></div>
+        <h1>Image Console</h1>
+        <p class="subtitle">查询 Elucid 可用生图模型，按模型能力切换文生图或图生图。若模型不支持图生图，上传区会自动禁用，只保留文生图。</p>
+      </div>
+      <nav class="nav">
+        <a href="./">视频页</a>
+        <a href="./image.html">生图页</a>
+      </nav>
+    </header>
+
+    <section class="layout">
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <h2 class="panel-title">生成控制台</h2>
+            <p class="panel-note">默认使用 hk.getelucid.com，可通过代理绕过浏览器 CORS。</p>
+          </div>
+          <div class="toolbar">
+            <button class="button ghost" id="testProxyBtn" type="button">测试代理</button>
+            <button class="button ghost" id="loadModelsBtn" type="button">查询模型</button>
+            <button class="button ghost" id="saveSettingsBtn" type="button">保存配置</button>
+          </div>
+        </div>
+        <div class="panel-body stack">
+          <div class="alert" id="errorBox"></div>
+
+          <div class="grid-2">
+            <div class="field">
+              <label for="baseUrl">API Base URL</label>
+              <input class="control" id="baseUrl" value="https://hk.getelucid.com/v1" autocomplete="off">
+            </div>
+            <div class="field">
+              <label for="connectionMode">连接模式</label>
+              <select id="connectionMode">
+                <option value="proxy" selected>代理模式</option>
+                <option value="direct">直连模式</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <div class="field">
+              <label for="proxyUrl">代理地址</label>
+              <input class="control" id="proxyUrl" value="https://seedance-video-proxy.lxiaonan-video.workers.dev" placeholder="/proxy 或 https://..." autocomplete="off">
+              <div class="fineprint">Cloudflare Pages 版会自动使用同域 /proxy。GitHub Pages 版需要 workers.dev 或其他代理地址。</div>
+            </div>
+            <div class="field">
+              <label for="apiKey">API Key</label>
+              <div class="secret-row">
+                <input class="control" id="apiKey" type="password" value="sk-6ff3c3a0441d17111a4a7c783f203d272ee169e797486cb1fb214954228afec4" autocomplete="off">
+                <button class="toggle" id="toggleKeyBtn" type="button">eye</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <div class="field">
+              <label for="model">模型</label>
+              <select id="model"></select>
+              <div class="chips" id="capabilityChips"></div>
+            </div>
+            <div class="field">
+              <label>生成模式</label>
+              <div class="mode-row">
+                <button class="mode-button active" id="textModeBtn" type="button" data-mode="text">文生图</button>
+                <button class="mode-button" id="imageModeBtn" type="button" data-mode="image">图生图</button>
+              </div>
+              <div class="fineprint" id="modeHint">选择支持图生图的模型后可上传参考图。</div>
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <div class="field">
+              <label for="size">尺寸</label>
+              <select id="size">
+                <option value="1024x1024" selected>1024 x 1024</option>
+                <option value="1024x1536">1024 x 1536</option>
+                <option value="1536x1024">1536 x 1024</option>
+                <option value="512x512">512 x 512</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="count">数量</label>
+              <select id="count">
+                <option value="1" selected>1 张</option>
+                <option value="2">2 张</option>
+                <option value="4">4 张</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="prompt">提示词</label>
+            <textarea id="prompt">一张精致的产品海报，柔和自然光，清晰主体，细节丰富，高级商业摄影质感。</textarea>
+          </div>
+
+          <section class="dropzone disabled" id="dropzone" data-frame="image">
+            <input class="file-input" id="imageInput" type="file" accept="image/*">
+            <div class="preview" id="imagePreview"><div class="empty-preview">REFERENCE IMAGE</div></div>
+            <div class="drop-actions">
+              <div class="file-meta" id="imageMeta">当前模型/模式无需上传图片</div>
+              <button class="button" id="pickImageBtn" type="button">选择图片</button>
+            </div>
+          </section>
+
+          <div class="grid-2">
+            <label class="fineprint"><input type="checkbox" id="storeKey"> 在本机浏览器保存 API key</label>
+            <label class="fineprint"><input type="checkbox" id="autoDownload" checked> 成功后自动下载</label>
+          </div>
+
+          <div class="toolbar">
+            <button class="button primary" id="generateBtn" type="button">生成图片</button>
+            <button class="button danger" id="clearBtn" type="button">清空结果</button>
+          </div>
+        </div>
+      </div>
+
+      <aside class="stack">
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2 class="panel-title">任务日志</h2>
+              <p class="panel-note">错误会显示接口原始返回，方便判断模型是否支持。</p>
+            </div>
+          </div>
+          <div class="panel-body">
+            <div class="log" id="logBox">等待操作...</div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2 class="panel-title">模型列表</h2>
+              <p class="panel-note">从 /models 动态读取，只展示生图相关模型。</p>
+            </div>
+          </div>
+          <div class="panel-body">
+            <div class="model-list" id="modelList"></div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2 class="panel-title">生成结果</h2>
+              <p class="panel-note">支持 base64 或图片 URL 响应。</p>
+            </div>
+          </div>
+          <div class="panel-body">
+            <div class="result-grid" id="resultGrid"></div>
+          </div>
+        </section>
+      </aside>
+    </section>
+  </main>
+
+  <script>
+    const STORAGE_KEY = 'elucid-image-console-settings';
+    const KNOWN_IMAGE_MODELS = [
+      { id: 'grok-imagine-image', text: true, image: true },
+      { id: 'grok-imagine-image-pro', text: true, image: true },
+      { id: 'grok-imagine-image-lite', text: true, image: false }
+    ];
+
+    const state = {
+      models: [],
+      mode: 'text',
+      imageData: '',
+      imageMeta: null,
+      objectUrls: []
+    };
+
+    const $ = (id) => document.getElementById(id);
+    const els = {
+      errorBox: $('errorBox'),
+      baseUrl: $('baseUrl'),
+      connectionMode: $('connectionMode'),
+      proxyUrl: $('proxyUrl'),
+      apiKey: $('apiKey'),
+      toggleKeyBtn: $('toggleKeyBtn'),
+      model: $('model'),
+      capabilityChips: $('capabilityChips'),
+      textModeBtn: $('textModeBtn'),
+      imageModeBtn: $('imageModeBtn'),
+      modeHint: $('modeHint'),
+      size: $('size'),
+      count: $('count'),
+      prompt: $('prompt'),
+      dropzone: $('dropzone'),
+      imageInput: $('imageInput'),
+      imagePreview: $('imagePreview'),
+      imageMeta: $('imageMeta'),
+      pickImageBtn: $('pickImageBtn'),
+      storeKey: $('storeKey'),
+      autoDownload: $('autoDownload'),
+      testProxyBtn: $('testProxyBtn'),
+      loadModelsBtn: $('loadModelsBtn'),
+      saveSettingsBtn: $('saveSettingsBtn'),
+      generateBtn: $('generateBtn'),
+      clearBtn: $('clearBtn'),
+      logBox: $('logBox'),
+      modelList: $('modelList'),
+      resultGrid: $('resultGrid')
+    };
+
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+      })[char]);
+    }
+
+    function log(message, data) {
+      const time = new Date().toLocaleTimeString();
+      const extra = data ? `\n${typeof data === 'string' ? data : JSON.stringify(data, null, 2)}` : '';
+      els.logBox.textContent = `[${time}] ${message}${extra}\n\n${els.logBox.textContent.replace('等待操作...', '')}`;
+    }
+
+    function setError(message) {
+      els.errorBox.textContent = message || '';
+      els.errorBox.classList.toggle('show', Boolean(message));
+    }
+
+    function cleanBaseUrl() {
+      return els.baseUrl.value.trim().replace(/\/+$/, '');
+    }
+
+    function cleanProxyUrl() {
+      const value = els.proxyUrl.value.trim();
+      if (value === '/proxy') return value;
+      return value.replace(/\/+$/, '');
+    }
+
+    function useProxy() {
+      return els.connectionMode.value === 'proxy';
+    }
+
+    function apiUrl(path, absoluteUrl = '') {
+      if (useProxy()) {
+        const proxy = cleanProxyUrl();
+        if (!proxy) throw new Error('请填写代理地址。');
+        const target = absoluteUrl || `${cleanBaseUrl()}${path}`;
+        return `${proxy}/?url=${encodeURIComponent(target)}`;
+      }
+      return absoluteUrl || `${cleanBaseUrl()}${path}`;
+    }
+
+    function authHeaders(json = true) {
+      const headers = { Authorization: `Bearer ${els.apiKey.value.trim()}` };
+      if (json) headers['Content-Type'] = 'application/json';
+      return headers;
+    }
+
+    function applyRuntimeDefaults() {
+      if (location.hostname.endsWith('.pages.dev')) {
+        els.proxyUrl.value = '/proxy';
+      }
+    }
+
+    function saveSettings() {
+      const settings = {
+        baseUrl: els.baseUrl.value.trim(),
+        connectionMode: els.connectionMode.value,
+        proxyUrl: els.proxyUrl.value.trim(),
+        model: els.model.value,
+        size: els.size.value,
+        count: els.count.value,
+        prompt: els.prompt.value,
+        storeKey: els.storeKey.checked,
+        autoDownload: els.autoDownload.checked,
+        apiKey: els.storeKey.checked ? els.apiKey.value : ''
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+      log('配置已保存。');
+    }
+
+    function loadSettings() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return;
+        const settings = JSON.parse(raw);
+        els.baseUrl.value = settings.baseUrl || els.baseUrl.value;
+        els.connectionMode.value = settings.connectionMode || els.connectionMode.value;
+        els.proxyUrl.value = settings.proxyUrl || els.proxyUrl.value;
+        els.size.value = settings.size || els.size.value;
+        els.count.value = settings.count || els.count.value;
+        els.prompt.value = settings.prompt || els.prompt.value;
+        els.storeKey.checked = Boolean(settings.storeKey);
+        els.autoDownload.checked = settings.autoDownload !== false;
+        if (settings.storeKey && settings.apiKey) els.apiKey.value = settings.apiKey;
+      } catch (error) {
+        console.warn(error);
+      }
+    }
+
+    function modelCapabilities(id) {
+      const known = KNOWN_IMAGE_MODELS.find((item) => item.id === id);
+      if (known) return known;
+      const lower = id.toLowerCase();
+      return {
+        id,
+        text: lower.includes('image') || lower.includes('imagine'),
+        image: lower.includes('edit') || lower.includes('pro') || lower.includes('image')
+      };
+    }
+
+    function imageModelsFrom(rawModels) {
+      const found = rawModels
+        .map((item) => typeof item === 'string' ? { id: item, display_name: item } : item)
+        .filter((item) => item && typeof item.id === 'string')
+        .filter((item) => /image|imagine|flux|sd|dall|midjourney|grok/i.test(item.id));
+      const ids = new Set(found.map((item) => item.id));
+      for (const fallback of KNOWN_IMAGE_MODELS) {
+        if (!ids.has(fallback.id)) found.push({ id: fallback.id, display_name: fallback.id });
+      }
+      return found;
+    }
+
+    async function parseJsonResponse(response) {
+      const text = await response.text();
+      try {
+        return text ? JSON.parse(text) : {};
+      } catch (error) {
+        return { raw: text };
+      }
+    }
+
+    function readableError(body, status) {
+      if (body?.error?.message) return `${status}: ${body.error.message}`;
+      if (body?.message) return `${status}: ${body.message}`;
+      if (body?.raw) return `${status}: ${body.raw}`;
+      return `HTTP ${status}`;
+    }
+
+    function handleError(error) {
+      const message = error?.message || String(error);
+      const hint = message.includes('Failed to fetch')
+        ? `请求失败。代理地址可能不可达：${cleanProxyUrl()}`
+        : message;
+      setError(hint);
+      log('请求失败。', hint);
+    }
+
+    function renderModelSelect() {
+      if (!state.models.length) {
+        state.models = KNOWN_IMAGE_MODELS.map((item) => ({ id: item.id, display_name: item.id }));
+      }
+      const current = els.model.value || state.models[0]?.id;
+      els.model.innerHTML = state.models
+        .map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.display_name || item.id)}</option>`)
+        .join('');
+      if (state.models.some((item) => item.id === current)) els.model.value = current;
+      renderCapabilities();
+      renderModelList();
+    }
+
+    function renderCapabilities() {
+      const caps = modelCapabilities(els.model.value);
+      els.capabilityChips.innerHTML = [
+        `<span class="chip ${caps.text ? 'good' : 'bad'}">文生图 ${caps.text ? '可用' : '不可用'}</span>`,
+        `<span class="chip ${caps.image ? 'good' : 'bad'}">图生图 ${caps.image ? '可尝试' : '不可用'}</span>`
+      ].join('');
+
+      if (!caps.image && state.mode === 'image') {
+        state.mode = 'text';
+      }
+      els.textModeBtn.classList.toggle('active', state.mode === 'text');
+      els.imageModeBtn.classList.toggle('active', state.mode === 'image');
+      els.imageModeBtn.disabled = !caps.image;
+      els.dropzone.classList.toggle('disabled', state.mode !== 'image' || !caps.image);
+      els.imageMeta.textContent = state.mode === 'image' && caps.image
+        ? (state.imageMeta ? `${state.imageMeta.name} · ${formatBytes(state.imageMeta.size)}` : '图生图模式：请选择参考图片')
+        : '当前模型/模式无需上传图片';
+      els.modeHint.textContent = caps.image
+        ? '此模型可尝试图生图；若接口返回不支持，会显示原始错误。'
+        : '此模型只开放文生图，图生图已禁用。';
+    }
+
+    function renderModelList() {
+      els.modelList.innerHTML = state.models.map((item) => {
+        const caps = modelCapabilities(item.id);
+        return `<article class="model-item">
+          <div class="model-name">${escapeHtml(item.id)}</div>
+          <div class="chips">
+            <span class="chip ${caps.text ? 'good' : 'bad'}">text</span>
+            <span class="chip ${caps.image ? 'good' : 'bad'}">image</span>
+          </div>
+        </article>`;
+      }).join('');
+    }
+
+    async function loadModels() {
+      setError('');
+      if (!els.apiKey.value.trim()) {
+        setError('请填写 API key。');
+        return;
+      }
+      log('开始查询模型列表。');
+      try {
+        const response = await fetch(apiUrl('/models'), { headers: authHeaders(false) });
+        const body = await parseJsonResponse(response);
+        if (!response.ok) throw new Error(readableError(body, response.status));
+        const rawModels = Array.isArray(body.data) ? body.data : [];
+        state.models = imageModelsFrom(rawModels);
+        renderModelSelect();
+        log(`模型查询完成：${state.models.length} 个生图相关模型。`, state.models.map((item) => item.id));
+      } catch (error) {
+        handleError(error);
+      }
+    }
+
+    async function testProxy() {
+      setError('');
+      log('开始测试代理。');
+      try {
+        const response = await fetch(apiUrl('/models'), { headers: authHeaders(false) });
+        const body = await parseJsonResponse(response);
+        if (!response.ok) throw new Error(readableError(body, response.status));
+        log(`代理可用，读取到 ${Array.isArray(body.data) ? body.data.length : 0} 个模型。`);
+      } catch (error) {
+        handleError(error);
+      }
+    }
+
+    function setMode(mode) {
+      state.mode = mode;
+      renderCapabilities();
+    }
+
+    function formatBytes(bytes) {
+      if (!bytes) return '0 B';
+      const units = ['B', 'KB', 'MB'];
+      let value = bytes;
+      let index = 0;
+      while (value >= 1024 && index < units.length - 1) {
+        value /= 1024;
+        index += 1;
+      }
+      return `${value.toFixed(value >= 10 || index === 0 ? 0 : 1)} ${units[index]}`;
+    }
+
+    function readImage(file) {
+      if (!file || !file.type.startsWith('image/')) {
+        setError('请选择图片文件。');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        state.imageData = String(reader.result);
+        state.imageMeta = { name: file.name, size: file.size, type: file.type };
+        els.imagePreview.innerHTML = `<img src="${state.imageData}" alt="参考图">`;
+        renderCapabilities();
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function setupDropzone() {
+      els.pickImageBtn.addEventListener('click', () => els.imageInput.click());
+      els.imageInput.addEventListener('change', () => readImage(els.imageInput.files[0]));
+      els.dropzone.addEventListener('dragover', (event) => event.preventDefault());
+      els.dropzone.addEventListener('drop', (event) => {
+        event.preventDefault();
+        readImage(event.dataTransfer.files[0]);
+      });
+    }
+
+    function extractImages(body) {
+      const results = [];
+      function walk(node) {
+        if (Array.isArray(node)) {
+          node.forEach(walk);
+        } else if (node && typeof node === 'object') {
+          for (const key of ['url', 'image_url']) {
+            const value = node[key];
+            if (typeof value === 'string' && /^https?:\/\//i.test(value)) results.push(value);
+          }
+          for (const key of ['b64_json', 'base64', 'image']) {
+            const value = node[key];
+            if (typeof value === 'string' && value.length > 100) {
+              results.push(value.startsWith('data:') ? value : `data:image/png;base64,${value}`);
+            }
+          }
+          Object.values(node).forEach(walk);
+        }
+      }
+      walk(body);
+      return Array.from(new Set(results));
+    }
+
+    async function generate() {
+      setError('');
+      if (!els.apiKey.value.trim()) return setError('请填写 API key。');
+      if (!els.prompt.value.trim()) return setError('请填写提示词。');
+      const caps = modelCapabilities(els.model.value);
+      if (state.mode === 'image' && !caps.image) return setError('当前模型不支持图生图。');
+      if (state.mode === 'image' && !state.imageData) return setError('图生图模式请上传参考图片。');
+      saveSettings();
+
+      const path = state.mode === 'image' ? '/images/edits' : '/images/generations';
+      const payload = {
+        model: els.model.value,
+        prompt: els.prompt.value.trim(),
+        n: Number(els.count.value),
+        size: els.size.value
+      };
+      if (state.mode === 'image') {
+        payload.images = [{ image_url: state.imageData }];
+      }
+
+      els.generateBtn.disabled = true;
+      log(`开始${state.mode === 'image' ? '图生图' : '文生图'}。`, { endpoint: path, model: payload.model });
+      try {
+        const response = await fetch(apiUrl(path), {
+          method: 'POST',
+          headers: authHeaders(true),
+          body: JSON.stringify(payload)
+        });
+        const body = await parseJsonResponse(response);
+        if (!response.ok) throw new Error(readableError(body, response.status));
+        const images = extractImages(body);
+        if (!images.length) {
+          log('接口成功但未找到图片字段。', body);
+          throw new Error('接口成功但未找到图片 URL 或 base64 字段。');
+        }
+        renderResults(images);
+        log(`生成完成：${images.length} 张图片。`);
+      } catch (error) {
+        handleError(error);
+      } finally {
+        els.generateBtn.disabled = false;
+      }
+    }
+
+    function renderResults(images) {
+      els.resultGrid.innerHTML = '';
+      images.forEach((src, index) => {
+        const card = document.createElement('article');
+        card.className = 'result-card';
+        card.innerHTML = `<img src="${src}" alt="生成结果 ${index + 1}">
+          <div class="result-actions">
+            <a class="button" href="${src}" download="elucid-image-${Date.now()}-${index + 1}.png">下载</a>
+            <button class="button ghost" type="button" data-copy="${index}">复制地址</button>
+          </div>`;
+        els.resultGrid.appendChild(card);
+      });
+      if (els.autoDownload.checked && images[0]) {
+        const link = document.createElement('a');
+        link.href = images[0];
+        link.download = `elucid-image-${Date.now()}.png`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      }
+    }
+
+    function clearResults() {
+      els.resultGrid.innerHTML = '';
+      state.objectUrls.forEach((url) => URL.revokeObjectURL(url));
+      state.objectUrls = [];
+      log('结果已清空。');
+    }
+
+    function setupEvents() {
+      els.toggleKeyBtn.addEventListener('click', () => {
+        els.apiKey.type = els.apiKey.type === 'password' ? 'text' : 'password';
+        els.toggleKeyBtn.textContent = els.apiKey.type === 'password' ? 'eye' : 'hide';
+      });
+      els.saveSettingsBtn.addEventListener('click', saveSettings);
+      els.loadModelsBtn.addEventListener('click', loadModels);
+      els.testProxyBtn.addEventListener('click', testProxy);
+      els.generateBtn.addEventListener('click', generate);
+      els.clearBtn.addEventListener('click', clearResults);
+      els.model.addEventListener('change', renderCapabilities);
+      els.textModeBtn.addEventListener('click', () => setMode('text'));
+      els.imageModeBtn.addEventListener('click', () => setMode('image'));
+      els.resultGrid.addEventListener('click', async (event) => {
+        const button = event.target.closest('[data-copy]');
+        if (!button) return;
+        const img = button.closest('.result-card')?.querySelector('img');
+        if (img) {
+          await navigator.clipboard.writeText(img.src);
+          log('图片地址已复制。');
+        }
+      });
+    }
+
+    loadSettings();
+    applyRuntimeDefaults();
+    renderModelSelect();
+    setupDropzone();
+    setupEvents();
+    loadModels();
+  </script>
+</body>
+</html>
