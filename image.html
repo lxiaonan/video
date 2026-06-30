@@ -497,7 +497,7 @@
             <div class="field">
               <label for="apiKey">API Key</label>
               <div class="secret-row">
-                <input class="control" id="apiKey" type="password" value="sk-9543f02d55208cf277f27e77f2d299215bef927a806d7c21ecbf8147be54501c" autocomplete="off">
+                <input class="control" id="apiKey" type="password" value="sk-feb412c146b9391f5b9e4facf60f6e39759adf70e937086625f332e91b665866" autocomplete="off">
                 <button class="toggle" id="toggleKeyBtn" type="button">eye</button>
               </div>
             </div>
@@ -771,7 +771,7 @@
       const found = rawModels
         .map((item) => typeof item === 'string' ? { id: item, display_name: item } : item)
         .filter((item) => item && typeof item.id === 'string')
-        .filter((item) => /image|imagine|flux|sd|dall|midjourney|grok/i.test(item.id));
+        .filter((item) => /image|imagine|flux|sd|dall|midjourney|grok|gpt/i.test(item.id));
       return found;
     }
 
@@ -899,9 +899,9 @@
       for (const item of state.models) {
         const result = await probeTextImageModel(item.id);
         item.text = result.ok;
-        item.image = false;
+        item.image = result.ok ? await probeImageEditModel(item.id) : false;
         item.method = result.method;
-        item.reason = result.reason;
+        item.reason = item.image ? `${result.reason} 图生图验证通过。` : result.reason;
       }
       renderModelSelect();
       if (!options.silent) {
@@ -1020,6 +1020,19 @@
         method: '',
         reason: `images: ${imageResult.reason}; chat: ${chatResult.reason}`
       };
+    }
+
+    async function probeImageEditModel(model) {
+      const tinyPng = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAWElEQVR4nO3PQQ0AIBDAMMC/5+ONAvZoFSzZnZmdBcBvDQYMGDBgwIABAwYMGDBgwIABAwYMGDBgwIABAwYMGDBgwIABAwYMGDBgwIABAwYMGDBgwIABAwbsA2eBAW8bJf0wAAAAAElFTkSuQmCC';
+      const payload = {
+        model,
+        prompt: 'capability probe: turn this into a red circle',
+        n: 1,
+        size: '512x512',
+        images: [{ image_url: tinyPng }]
+      };
+      const result = await callAndExtract('/images/edits', payload);
+      return result.ok;
     }
 
     async function callAndExtract(path, payload) {
