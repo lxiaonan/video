@@ -986,11 +986,23 @@
 
     function extractImages(body) {
       const results = [];
+      if (Array.isArray(body?.data)) {
+        for (const item of body.data) {
+          if (typeof item?.url === 'string') results.push(item.url);
+          if (typeof item?.image_url === 'string') results.push(item.image_url);
+          if (typeof item?.b64_json === 'string') results.push(`data:image/png;base64,${item.b64_json}`);
+        }
+      }
+
+      const serialized = JSON.stringify(body || {});
+      const generatedUrls = serialized.match(/https?:\/\/[^"'\s<>\\]+(?:r2\.sysrv\.net\/cache\/generated|\/files\/image)[^"'\s<>\\]*/g) || [];
+      results.push(...generatedUrls.map((url) => url.replace(/\\\//g, '/')));
+
       function walk(node) {
         if (typeof node === 'string') {
           const urls = node.match(/https?:\/\/[^\s"'<>]+/g) || [];
           for (const url of urls) {
-            if (/\.(png|jpe?g|webp|gif)(\?|$)|\/files\/image/i.test(url)) results.push(url);
+            if (/\.(png|jpe?g|webp|gif)(\?|$)|\/files\/image|r2\.sysrv\.net\/cache\/generated/i.test(url)) results.push(url);
           }
           if (/^[A-Za-z0-9+/=]{200,}$/.test(node)) results.push(`data:image/png;base64,${node}`);
           return;
