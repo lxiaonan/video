@@ -449,7 +449,7 @@
       <div>
         <div class="kicker"><span class="mark">IMG</span><span>Elucid image generation</span></div>
         <h1>Image Console</h1>
-        <p class="subtitle">查询 Elucid 可用生图模型，按模型能力切换文生图或图生图。若模型不支持图生图，上传区会自动禁用，只保留文生图。</p>
+        <p class="subtitle">查询 Elucid 模型后自动验证图片生成能力；模型下拉框只保留实际通过 /images/generations 验证的可生图模型。</p>
       </div>
       <nav class="nav">
         <a href="./">视频页</a>
@@ -515,7 +515,7 @@
                 <button class="mode-button active" id="textModeBtn" type="button" data-mode="text">文生图</button>
                 <button class="mode-button" id="imageModeBtn" type="button" data-mode="image">图生图</button>
               </div>
-              <div class="fineprint" id="modeHint">选择支持图生图的模型后可上传参考图。</div>
+              <div class="fineprint" id="modeHint">模型列表只展示已验证可文生图的模型；没有可用模型时不可生成。</div>
             </div>
           </div>
 
@@ -582,7 +582,7 @@
           <div class="panel-head">
             <div>
               <h2 class="panel-title">模型列表</h2>
-              <p class="panel-note">从 /models 动态读取，只展示生图相关模型。</p>
+              <p class="panel-note">从 /models 动态读取，并只保留实际通过图片 endpoint 验证的模型。</p>
             </div>
           </div>
           <div class="panel-body">
@@ -772,10 +772,6 @@
         .map((item) => typeof item === 'string' ? { id: item, display_name: item } : item)
         .filter((item) => item && typeof item.id === 'string')
         .filter((item) => /image|imagine|flux|sd|dall|midjourney|grok/i.test(item.id));
-      const ids = new Set(found.map((item) => item.id));
-      for (const fallback of KNOWN_IMAGE_MODELS) {
-        if (!ids.has(fallback.id)) found.push({ id: fallback.id, display_name: fallback.id });
-      }
       return found;
     }
 
@@ -806,7 +802,10 @@
 
     function renderModelSelect() {
       if (!state.models.length) {
-        state.models = KNOWN_IMAGE_MODELS.map((item) => ({ id: item.id, display_name: item.id }));
+        els.model.innerHTML = '<option value="">暂无可用生图模型</option>';
+        renderCapabilities();
+        renderModelList();
+        return;
       }
       const current = els.model.value || state.models[0]?.id;
       els.model.innerHTML = state.models
@@ -818,6 +817,15 @@
     }
 
     function renderCapabilities() {
+      if (!els.model.value) {
+        els.capabilityChips.innerHTML = '<span class="chip bad">无可用模型</span>';
+        els.imageModeBtn.disabled = true;
+        els.dropzone.classList.add('disabled');
+        els.imageMeta.textContent = '没有可用生图模型';
+        els.modeHint.textContent = '当前 key 没有通过图片 endpoint 验证的模型。';
+        els.generateBtn.disabled = true;
+        return;
+      }
       const caps = modelCapabilities(els.model.value);
       els.capabilityChips.innerHTML = [
         `<span class="chip ${caps.text ? 'good' : 'bad'}">文生图 ${caps.text ? '可用' : '不可用'}</span>`,
@@ -868,16 +876,25 @@
         const rawModels = Array.isArray(body.data) ? body.data : [];
         state.models = imageModelsFrom(rawModels);
         renderModelSelect();
-        log(`模型查询完成：${state.models.length} 个生图相关模型。需要点击“验证能力”后才会允许生成。`, state.models.map((item) => item.id));
+        const candidates = state.models;
+        log(`查询到 ${candidates.length} 个疑似生图模型，开始验证可用性。`, candidates.map((item) => item.id));
+        await probeImageModels({ silent: true });
+        const usable = state.models.filter((item) => item.text);
+        state.models = usable;
+        renderModelSelect();
+        log(`可用生图模型：${usable.length} 个。`, usable.map((item) => item.id));
+        if (!usable.length) {
+          setError('当前 key 的 /models 里没有任何通过 /images/generations 验证的可用生图模型。');
+        }
       } catch (error) {
         handleError(error);
       }
     }
 
-    async function probeImageModels() {
+    async function probeImageModels(options = {}) {
       setError('');
       if (!state.models.length) await loadModels();
-      log('开始验证模型图片 endpoint 能力。');
+      if (!options.silent) log('开始验证模型图片 endpoint 能力。');
       for (const item of state.models) {
         const payload = {
           model: item.id,
@@ -908,7 +925,12 @@
         }
       }
       renderModelSelect();
-      log('能力验证完成。', state.models.map((item) => ({ id: item.id, text: item.text, image: item.image, reason: item.reason })));
+      if (!options.silent) {
+        state.models = state.models.filter((item) => item.text);
+        renderModelSelect();
+        log('能力验证完成，只保留可用模型。', state.models.map((item) => ({ id: item.id, text: item.text, image: item.image, reason: item.reason })));
+        if (!state.models.length) setError('没有可用生图模型。');
+      }
     }
 
     async function testProxy() {
@@ -993,6 +1015,7 @@
       setError('');
       if (!els.apiKey.value.trim()) return setError('请填写 API key。');
       if (!els.prompt.value.trim()) return setError('请填写提示词。');
+      if (!els.model.value) return setError('没有可用生图模型，请先查询模型。');
       const caps = modelCapabilities(els.model.value);
       if (!caps.text) return setError(caps.reason || '当前模型未验证支持图片生成。');
       if (state.mode === 'image' && !caps.image) return setError('当前模型不支持图生图。');
