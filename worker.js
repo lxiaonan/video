@@ -1,7 +1,8 @@
 const ALLOWED_TARGET_ORIGINS = new Set([
   'https://ai.silkroadai.io',
   'https://images.silkroadai.io',
-  'https://hk.getelucid.com'
+  'https://hk.getelucid.com',
+  'https://r2.sysrv.net'
 ]);
 
 const corsHeaders = {
