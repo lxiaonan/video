@@ -449,7 +449,7 @@
       <div>
         <div class="kicker"><span class="mark">IMG</span><span>Elucid image generation</span></div>
         <h1>Image Console</h1>
-        <p class="subtitle">查询 Elucid 模型后自动验证图片生成能力；模型下拉框只保留实际通过 /images/generations 验证的可生图模型。</p>
+        <p class="subtitle">查询 Elucid 模型后自动验证图片生成能力；模型下拉框只保留实际能返回图片的模型，兼容图片 endpoint 和 chat 返回图片链接两种路径。</p>
       </div>
       <nav class="nav">
         <a href="./">视频页</a>
@@ -497,7 +497,7 @@
             <div class="field">
               <label for="apiKey">API Key</label>
               <div class="secret-row">
-                <input class="control" id="apiKey" type="password" value="sk-6ff3c3a0441d17111a4a7c783f203d272ee169e797486cb1fb214954228afec4" autocomplete="off">
+                <input class="control" id="apiKey" type="password" value="sk-9543f02d55208cf277f27e77f2d299215bef927a806d7c21ecbf8147be54501c" autocomplete="off">
                 <button class="toggle" id="toggleKeyBtn" type="button">eye</button>
               </div>
             </div>
@@ -582,7 +582,7 @@
           <div class="panel-head">
             <div>
               <h2 class="panel-title">模型列表</h2>
-              <p class="panel-note">从 /models 动态读取，并只保留实际通过图片 endpoint 验证的模型。</p>
+              <p class="panel-note">从 /models 动态读取，并只保留实际返回图片 URL/base64 的模型。</p>
             </div>
           </div>
           <div class="panel-body">
@@ -829,7 +829,8 @@
       const caps = modelCapabilities(els.model.value);
       els.capabilityChips.innerHTML = [
         `<span class="chip ${caps.text ? 'good' : 'bad'}">文生图 ${caps.text ? '可用' : '不可用'}</span>`,
-        `<span class="chip ${caps.image ? 'good' : 'bad'}">图生图 ${caps.image ? '可尝试' : '不可用'}</span>`
+        `<span class="chip ${caps.image ? 'good' : 'bad'}">图生图 ${caps.image ? '可尝试' : '不可用'}</span>`,
+        caps.method ? `<span class="chip good">${escapeHtml(caps.method)}</span>` : ''
       ].join('');
 
       if (!caps.image && state.mode === 'image') {
@@ -877,14 +878,14 @@
         state.models = imageModelsFrom(rawModels);
         renderModelSelect();
         const candidates = state.models;
-        log(`查询到 ${candidates.length} 个疑似生图模型，开始验证可用性。`, candidates.map((item) => item.id));
+        log(`查询到 ${candidates.length} 个候选模型，开始验证是否能返回图片。`, candidates.map((item) => item.id));
         await probeImageModels({ silent: true });
         const usable = state.models.filter((item) => item.text);
         state.models = usable;
         renderModelSelect();
         log(`可用生图模型：${usable.length} 个。`, usable.map((item) => item.id));
         if (!usable.length) {
-          setError('当前 key 的 /models 里没有任何通过 /images/generations 验证的可用生图模型。');
+          setError('当前 key 的 /models 里没有任何验证可返回图片的模型。');
         }
       } catch (error) {
         handleError(error);
@@ -894,35 +895,13 @@
     async function probeImageModels(options = {}) {
       setError('');
       if (!state.models.length) await loadModels();
-      if (!options.silent) log('开始验证模型图片 endpoint 能力。');
+      if (!options.silent) log('开始验证模型生图能力。');
       for (const item of state.models) {
-        const payload = {
-          model: item.id,
-          prompt: 'capability probe',
-          n: 1,
-          size: '512x512'
-        };
-        try {
-          const response = await fetch(apiUrl('/images/generations'), {
-            method: 'POST',
-            headers: authHeaders(true),
-            body: JSON.stringify(payload)
-          });
-          const body = await parseJsonResponse(response);
-          if (response.ok) {
-            item.text = true;
-            item.image = true;
-            item.reason = '图片 endpoint 探测通过。';
-          } else {
-            item.text = false;
-            item.image = false;
-            item.reason = readableError(body, response.status);
-          }
-        } catch (error) {
-          item.text = false;
-          item.image = false;
-          item.reason = error?.message || String(error);
-        }
+        const result = await probeTextImageModel(item.id);
+        item.text = result.ok;
+        item.image = false;
+        item.method = result.method;
+        item.reason = result.reason;
       }
       renderModelSelect();
       if (!options.silent) {
@@ -991,6 +970,14 @@
     function extractImages(body) {
       const results = [];
       function walk(node) {
+        if (typeof node === 'string') {
+          const urls = node.match(/https?:\/\/[^\s"'<>]+/g) || [];
+          for (const url of urls) {
+            if (/\.(png|jpe?g|webp|gif)(\?|$)|\/files\/image/i.test(url)) results.push(url);
+          }
+          if (/^[A-Za-z0-9+/=]{200,}$/.test(node)) results.push(`data:image/png;base64,${node}`);
+          return;
+        }
         if (Array.isArray(node)) {
           node.forEach(walk);
         } else if (node && typeof node === 'object') {
@@ -1011,6 +998,72 @@
       return Array.from(new Set(results));
     }
 
+    async function probeTextImageModel(model) {
+      const imagePayload = {
+        model,
+        prompt: 'capability probe: a tiny red dot on a white background',
+        n: 1,
+        size: '512x512'
+      };
+      const imageResult = await callAndExtract('/images/generations', imagePayload);
+      if (imageResult.ok) return { ok: true, method: 'images', reason: 'images endpoint 可返回图片。' };
+
+      const chatPayload = {
+        model,
+        messages: [{ role: 'user', content: 'Generate an image of a tiny red dot on a white background. Return only the image URL.' }]
+      };
+      const chatResult = await callAndExtract('/chat/completions', chatPayload);
+      if (chatResult.ok) return { ok: true, method: 'chat', reason: 'chat endpoint 可返回图片链接。' };
+
+      return {
+        ok: false,
+        method: '',
+        reason: `images: ${imageResult.reason}; chat: ${chatResult.reason}`
+      };
+    }
+
+    async function callAndExtract(path, payload) {
+      try {
+        const response = await fetch(apiUrl(path), {
+          method: 'POST',
+          headers: authHeaders(true),
+          body: JSON.stringify(payload)
+        });
+        const body = await parseJsonResponse(response);
+        if (!response.ok) return { ok: false, reason: readableError(body, response.status), body };
+        const images = extractImages(body);
+        return images.length
+          ? { ok: true, reason: `found ${images.length} image(s)`, body, images }
+          : { ok: false, reason: '接口成功但未返回图片 URL/base64', body };
+      } catch (error) {
+        return { ok: false, reason: error?.message || String(error) };
+      }
+    }
+
+    function buildGeneratePayload(method) {
+      if (state.mode === 'image') {
+        return {
+          model: els.model.value,
+          prompt: els.prompt.value.trim(),
+          n: Number(els.count.value),
+          size: els.size.value,
+          images: [{ image_url: state.imageData }]
+        };
+      }
+      if (method === 'chat') {
+        return {
+          model: els.model.value,
+          messages: [{ role: 'user', content: `${els.prompt.value.trim()}\nReturn only the generated image URL.` }]
+        };
+      }
+      return {
+        model: els.model.value,
+        prompt: els.prompt.value.trim(),
+        n: Number(els.count.value),
+        size: els.size.value
+      };
+    }
+
     async function generate() {
       setError('');
       if (!els.apiKey.value.trim()) return setError('请填写 API key。');
@@ -1022,19 +1075,14 @@
       if (state.mode === 'image' && !state.imageData) return setError('图生图模式请上传参考图片。');
       saveSettings();
 
-      const path = state.mode === 'image' ? '/images/edits' : '/images/generations';
-      const payload = {
-        model: els.model.value,
-        prompt: els.prompt.value.trim(),
-        n: Number(els.count.value),
-        size: els.size.value
-      };
-      if (state.mode === 'image') {
-        payload.images = [{ image_url: state.imageData }];
-      }
+      const method = caps.method || 'images';
+      const path = state.mode === 'image'
+        ? '/images/edits'
+        : (method === 'chat' ? '/chat/completions' : '/images/generations');
+      const payload = buildGeneratePayload(method);
 
       els.generateBtn.disabled = true;
-      log(`开始${state.mode === 'image' ? '图生图' : '文生图'}。`, { endpoint: path, model: payload.model });
+      log(`开始${state.mode === 'image' ? '图生图' : '文生图'}。`, { endpoint: path, method, model: payload.model });
       try {
         const response = await fetch(apiUrl(path), {
           method: 'POST',
