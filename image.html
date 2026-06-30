@@ -707,7 +707,7 @@
     }
 
     function applyRuntimeDefaults() {
-      if (location.hostname.endsWith('.pages.dev')) {
+      if (location.hostname.endsWith('.pages.dev') || location.hostname === '127.0.0.1' || location.hostname === 'localhost') {
         els.proxyUrl.value = '/proxy';
       }
     }
