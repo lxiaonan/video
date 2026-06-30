@@ -695,7 +695,8 @@
         const proxy = cleanProxyUrl();
         if (!proxy) throw new Error('请填写代理地址。');
         const target = absoluteUrl || `${cleanBaseUrl()}${path}`;
-        return `${proxy}/?url=${encodeURIComponent(target)}`;
+        const joiner = proxy === '/proxy' ? '?' : '/?';
+        return `${proxy}${joiner}url=${encodeURIComponent(target)}`;
       }
       return absoluteUrl || `${cleanBaseUrl()}${path}`;
     }
