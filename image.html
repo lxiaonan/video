@@ -467,6 +467,7 @@
           <div class="toolbar">
             <button class="button ghost" id="testProxyBtn" type="button">测试代理</button>
             <button class="button ghost" id="loadModelsBtn" type="button">查询模型</button>
+            <button class="button ghost" id="probeModelsBtn" type="button">验证能力</button>
             <button class="button ghost" id="saveSettingsBtn" type="button">保存配置</button>
           </div>
         </div>
@@ -607,9 +608,9 @@
   <script>
     const STORAGE_KEY = 'elucid-image-console-settings';
     const KNOWN_IMAGE_MODELS = [
-      { id: 'grok-imagine-image', text: true, image: true },
-      { id: 'grok-imagine-image-pro', text: true, image: true },
-      { id: 'grok-imagine-image-lite', text: true, image: false }
+      { id: 'grok-imagine-image', text: false, image: false, reason: '模型列表包含它，但 /images/generations 当前返回 requires an image model。' },
+      { id: 'grok-imagine-image-pro', text: false, image: false, reason: '模型列表包含它，但 /images/generations 当前返回 requires an image model。' },
+      { id: 'grok-imagine-image-lite', text: false, image: false, reason: '模型列表包含它，但 /images/generations 当前返回 requires an image model。' }
     ];
 
     const state = {
@@ -645,6 +646,7 @@
       autoDownload: $('autoDownload'),
       testProxyBtn: $('testProxyBtn'),
       loadModelsBtn: $('loadModelsBtn'),
+      probeModelsBtn: $('probeModelsBtn'),
       saveSettingsBtn: $('saveSettingsBtn'),
       generateBtn: $('generateBtn'),
       clearBtn: $('clearBtn'),
@@ -747,13 +749,21 @@
     }
 
     function modelCapabilities(id) {
+      const dynamic = state.models.find((item) => item.id === id && typeof item.text === 'boolean');
+      if (dynamic) return {
+        id,
+        text: dynamic.text,
+        image: dynamic.image,
+        reason: dynamic.reason
+      };
       const known = KNOWN_IMAGE_MODELS.find((item) => item.id === id);
       if (known) return known;
       const lower = id.toLowerCase();
       return {
         id,
-        text: lower.includes('image') || lower.includes('imagine'),
-        image: lower.includes('edit') || lower.includes('pro') || lower.includes('image')
+        text: false,
+        image: false,
+        reason: lower.includes('image') || lower.includes('imagine') ? '需先探测通过后才允许生成。' : '不是生图模型。'
       };
     }
 
@@ -826,7 +836,8 @@
         : '当前模型/模式无需上传图片';
       els.modeHint.textContent = caps.image
         ? '此模型可尝试图生图；若接口返回不支持，会显示原始错误。'
-        : '此模型只开放文生图，图生图已禁用。';
+        : (caps.reason || '此模型未验证支持图片 endpoint，生成已禁用。');
+      els.generateBtn.disabled = !caps.text;
     }
 
     function renderModelList() {
@@ -838,6 +849,7 @@
             <span class="chip ${caps.text ? 'good' : 'bad'}">text</span>
             <span class="chip ${caps.image ? 'good' : 'bad'}">image</span>
           </div>
+          <div class="fineprint">${escapeHtml(caps.reason || '')}</div>
         </article>`;
       }).join('');
     }
@@ -856,10 +868,47 @@
         const rawModels = Array.isArray(body.data) ? body.data : [];
         state.models = imageModelsFrom(rawModels);
         renderModelSelect();
-        log(`模型查询完成：${state.models.length} 个生图相关模型。`, state.models.map((item) => item.id));
+        log(`模型查询完成：${state.models.length} 个生图相关模型。需要点击“验证能力”后才会允许生成。`, state.models.map((item) => item.id));
       } catch (error) {
         handleError(error);
       }
+    }
+
+    async function probeImageModels() {
+      setError('');
+      if (!state.models.length) await loadModels();
+      log('开始验证模型图片 endpoint 能力。');
+      for (const item of state.models) {
+        const payload = {
+          model: item.id,
+          prompt: 'capability probe',
+          n: 1,
+          size: '512x512'
+        };
+        try {
+          const response = await fetch(apiUrl('/images/generations'), {
+            method: 'POST',
+            headers: authHeaders(true),
+            body: JSON.stringify(payload)
+          });
+          const body = await parseJsonResponse(response);
+          if (response.ok) {
+            item.text = true;
+            item.image = true;
+            item.reason = '图片 endpoint 探测通过。';
+          } else {
+            item.text = false;
+            item.image = false;
+            item.reason = readableError(body, response.status);
+          }
+        } catch (error) {
+          item.text = false;
+          item.image = false;
+          item.reason = error?.message || String(error);
+        }
+      }
+      renderModelSelect();
+      log('能力验证完成。', state.models.map((item) => ({ id: item.id, text: item.text, image: item.image, reason: item.reason })));
     }
 
     async function testProxy() {
@@ -945,6 +994,7 @@
       if (!els.apiKey.value.trim()) return setError('请填写 API key。');
       if (!els.prompt.value.trim()) return setError('请填写提示词。');
       const caps = modelCapabilities(els.model.value);
+      if (!caps.text) return setError(caps.reason || '当前模型未验证支持图片生成。');
       if (state.mode === 'image' && !caps.image) return setError('当前模型不支持图生图。');
       if (state.mode === 'image' && !state.imageData) return setError('图生图模式请上传参考图片。');
       saveSettings();
@@ -980,7 +1030,7 @@
       } catch (error) {
         handleError(error);
       } finally {
-        els.generateBtn.disabled = false;
+        renderCapabilities();
       }
     }
 
@@ -1020,6 +1070,7 @@
       });
       els.saveSettingsBtn.addEventListener('click', saveSettings);
       els.loadModelsBtn.addEventListener('click', loadModels);
+      els.probeModelsBtn.addEventListener('click', probeImageModels);
       els.testProxyBtn.addEventListener('click', testProxy);
       els.generateBtn.addEventListener('click', generate);
       els.clearBtn.addEventListener('click', clearResults);
