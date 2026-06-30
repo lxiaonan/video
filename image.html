@@ -402,8 +402,92 @@
 
     .result-actions {
       display: flex;
+      flex-wrap: wrap;
       gap: 8px;
       padding: 9px;
+    }
+
+    .result-actions .button {
+      min-height: 36px;
+      flex: 1 1 auto;
+      padding: 8px 10px;
+    }
+
+    .history-list {
+      display: grid;
+      gap: 10px;
+      max-height: 520px;
+      overflow: auto;
+    }
+
+    .history-empty {
+      padding: 14px;
+      border: 1px dashed var(--line);
+      border-radius: 7px;
+      color: var(--dim);
+      background: #10100f;
+      font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .history-item {
+      display: grid;
+      grid-template-columns: 76px minmax(0, 1fr);
+      gap: 10px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #11110f;
+    }
+
+    .history-thumb {
+      width: 76px;
+      aspect-ratio: 1 / 1;
+      overflow: hidden;
+      border-radius: 6px;
+      background: #080807;
+    }
+
+    .history-thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .history-content {
+      min-width: 0;
+      display: grid;
+      gap: 8px;
+    }
+
+    .history-title {
+      margin: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--ink);
+      font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 13px;
+      line-height: 1.25;
+    }
+
+    .history-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .history-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+    }
+
+    .history-actions .button {
+      min-height: 32px;
+      padding: 6px 9px;
     }
 
     .model-list {
@@ -601,12 +685,28 @@
             <div class="result-grid" id="resultGrid"></div>
           </div>
         </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2 class="panel-title">本地历史</h2>
+              <p class="panel-note"><span id="historyCount">0</span> 条记录，保存在当前浏览器。</p>
+            </div>
+            <button class="button danger" id="clearHistoryBtn" type="button">清空历史</button>
+          </div>
+          <div class="panel-body">
+            <div class="history-list" id="historyList"></div>
+          </div>
+        </section>
       </aside>
     </section>
   </main>
 
   <script>
     const STORAGE_KEY = 'elucid-image-console-settings';
+    const HISTORY_DB_NAME = 'elucid-image-console-history';
+    const HISTORY_STORE_NAME = 'generations';
+    const HISTORY_MAX_ITEMS = 80;
     const KNOWN_IMAGE_MODELS = [
       { id: 'grok-imagine-image', text: false, image: false, reason: '模型列表包含它，但 /images/generations 当前返回 requires an image model。' },
       { id: 'grok-imagine-image-pro', text: false, image: false, reason: '模型列表包含它，但 /images/generations 当前返回 requires an image model。' },
@@ -618,7 +718,8 @@
       mode: 'text',
       imageData: '',
       imageMeta: null,
-      objectUrls: []
+      objectUrls: [],
+      history: []
     };
 
     const $ = (id) => document.getElementById(id);
@@ -652,7 +753,10 @@
       clearBtn: $('clearBtn'),
       logBox: $('logBox'),
       modelList: $('modelList'),
-      resultGrid: $('resultGrid')
+      resultGrid: $('resultGrid'),
+      historyList: $('historyList'),
+      historyCount: $('historyCount'),
+      clearHistoryBtn: $('clearHistoryBtn')
     };
 
     function escapeHtml(value) {
@@ -808,6 +912,186 @@
         : message;
       setError(hint);
       log('请求失败。', hint);
+    }
+
+    function openHistoryDb() {
+      return new Promise((resolve, reject) => {
+        const request = indexedDB.open(HISTORY_DB_NAME, 1);
+        request.onupgradeneeded = () => {
+          const db = request.result;
+          if (!db.objectStoreNames.contains(HISTORY_STORE_NAME)) {
+            const store = db.createObjectStore(HISTORY_STORE_NAME, { keyPath: 'id' });
+            store.createIndex('createdAt', 'createdAt');
+          }
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error || new Error('无法打开本地历史数据库。'));
+      });
+    }
+
+    function withHistoryStore(mode, callback) {
+      return openHistoryDb().then((db) => new Promise((resolve, reject) => {
+        const tx = db.transaction(HISTORY_STORE_NAME, mode);
+        const store = tx.objectStore(HISTORY_STORE_NAME);
+        const result = callback(store);
+        tx.oncomplete = () => {
+          db.close();
+          resolve(result);
+        };
+        tx.onerror = () => {
+          db.close();
+          reject(tx.error || new Error('本地历史写入失败。'));
+        };
+        tx.onabort = () => {
+          db.close();
+          reject(tx.error || new Error('本地历史操作已取消。'));
+        };
+      }));
+    }
+
+    async function loadHistory() {
+      try {
+        const records = await withHistoryStore('readonly', (store) => new Promise((resolve, reject) => {
+          const request = store.getAll();
+          request.onsuccess = () => resolve(request.result || []);
+          request.onerror = () => reject(request.error || new Error('读取历史失败。'));
+        }));
+        state.history = records.sort((a, b) => b.createdAt - a.createdAt);
+        renderHistory();
+      } catch (error) {
+        console.warn(error);
+        log('读取本地历史失败。', error?.message || String(error));
+      }
+    }
+
+    async function trimHistory() {
+      if (state.history.length <= HISTORY_MAX_ITEMS) return;
+      const overflow = state.history.slice(HISTORY_MAX_ITEMS);
+      await withHistoryStore('readwrite', (store) => {
+        overflow.forEach((item) => store.delete(item.id));
+      });
+      state.history = state.history.slice(0, HISTORY_MAX_ITEMS);
+    }
+
+    function makeHistoryId() {
+      if (crypto?.randomUUID) return crypto.randomUUID();
+      return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    }
+
+    function blobToDataUrl(blob) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error || new Error('图片转换失败。'));
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    async function persistableImageSrc(src) {
+      if (/^data:/i.test(src)) return { storedSrc: src, sourceUrl: '' };
+      try {
+        const response = await fetch(useProxy() ? apiUrl('', src) : src);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const blob = await response.blob();
+        return { storedSrc: await blobToDataUrl(blob), sourceUrl: src };
+      } catch (error) {
+        console.warn('Could not persist image bytes, keeping URL only.', error);
+        return { storedSrc: src, sourceUrl: src, persistWarning: error?.message || String(error) };
+      }
+    }
+
+    async function saveHistoryRecord(images) {
+      const createdAt = Date.now();
+      const storedImages = await Promise.all(images.map(async (src) => ({
+        originalSrc: src,
+        ...(await persistableImageSrc(src))
+      })));
+      const record = {
+        id: makeHistoryId(),
+        createdAt,
+        mode: state.mode,
+        model: els.model.value,
+        prompt: els.prompt.value.trim(),
+        size: els.size.value,
+        count: Number(els.count.value),
+        reference: state.mode === 'image' && state.imageMeta ? { ...state.imageMeta } : null,
+        images: storedImages
+      };
+      await withHistoryStore('readwrite', (store) => store.put(record));
+      state.history = [record, ...state.history.filter((item) => item.id !== record.id)];
+      await trimHistory();
+      renderHistory();
+      const warningCount = storedImages.filter((item) => item.persistWarning).length;
+      if (warningCount) {
+        log(`已保存历史，但 ${warningCount} 张图只能保存远程 URL。`);
+      } else {
+        log('生成记录已保存到浏览器本地历史。');
+      }
+    }
+
+    function historyImages(record) {
+      return (record?.images || []).map((item) => item.storedSrc || item.originalSrc).filter(Boolean);
+    }
+
+    function formatHistoryTime(value) {
+      return new Date(value).toLocaleString('zh-CN', {
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    }
+
+    function renderHistory() {
+      els.historyCount.textContent = String(state.history.length);
+      els.clearHistoryBtn.disabled = !state.history.length;
+      if (!state.history.length) {
+        els.historyList.innerHTML = '<div class="history-empty">还没有本地记录。生成成功后会自动保存，刷新页面也不会丢。</div>';
+        return;
+      }
+      els.historyList.innerHTML = state.history.map((item) => {
+        const images = historyImages(item);
+        const title = item.prompt || '(无提示词)';
+        return `<article class="history-item" data-history-id="${escapeHtml(item.id)}">
+          <div class="history-thumb">${images[0] ? `<img src="${images[0]}" alt="历史缩略图">` : ''}</div>
+          <div class="history-content">
+            <p class="history-title" title="${escapeHtml(title)}">${escapeHtml(title)}</p>
+            <div class="history-meta">
+              <span class="chip">${escapeHtml(item.mode === 'image' ? '图生图' : '文生图')}</span>
+              <span class="chip">${escapeHtml(item.model || 'unknown')}</span>
+              <span class="chip">${escapeHtml(item.size || '')}</span>
+              <span class="chip">${images.length} 张</span>
+              <span class="chip">${escapeHtml(formatHistoryTime(item.createdAt))}</span>
+            </div>
+            <div class="history-actions">
+              <button class="button" type="button" data-history-view="${escapeHtml(item.id)}">查看</button>
+              <button class="button ghost" type="button" data-history-copy="${escapeHtml(item.id)}">复制</button>
+              <button class="button danger" type="button" data-history-delete="${escapeHtml(item.id)}">删除</button>
+            </div>
+          </div>
+        </article>`;
+      }).join('');
+    }
+
+    function findHistoryRecord(id) {
+      return state.history.find((item) => item.id === id);
+    }
+
+    async function deleteHistoryRecord(id) {
+      await withHistoryStore('readwrite', (store) => store.delete(id));
+      state.history = state.history.filter((item) => item.id !== id);
+      renderHistory();
+      log('已删除一条本地历史。');
+    }
+
+    async function clearHistory() {
+      if (!state.history.length) return;
+      const confirmed = confirm('确定清空所有本地生成历史吗？这个操作只影响当前浏览器。');
+      if (!confirmed) return;
+      await withHistoryStore('readwrite', (store) => store.clear());
+      state.history = [];
+      renderHistory();
+      log('本地历史已清空。');
     }
 
     function renderModelSelect() {
@@ -1139,6 +1423,7 @@
           throw new Error('接口成功但未找到图片 URL 或 base64 字段。');
         }
         renderResults(images);
+        saveHistoryRecord(images).catch((error) => log('保存本地历史失败。', error?.message || String(error)));
         log(`生成完成：${images.length} 张图片。`);
       } catch (error) {
         handleError(error);
@@ -1147,7 +1432,7 @@
       }
     }
 
-    function renderResults(images) {
+    function renderResults(images, options = {}) {
       els.resultGrid.innerHTML = '';
       images.forEach((src, index) => {
         const card = document.createElement('article');
@@ -1159,7 +1444,10 @@
           </div>`;
         els.resultGrid.appendChild(card);
       });
-      if (els.autoDownload.checked && images[0]) {
+      if (options.fromHistory) {
+        log(`已从本地历史恢复 ${images.length} 张图片到结果区。`);
+      }
+      if (!options.fromHistory && els.autoDownload.checked && images[0]) {
         const link = document.createElement('a');
         link.href = images[0];
         link.download = `elucid-image-${Date.now()}.png`;
@@ -1190,6 +1478,7 @@
       els.model.addEventListener('change', renderCapabilities);
       els.textModeBtn.addEventListener('click', () => setMode('text'));
       els.imageModeBtn.addEventListener('click', () => setMode('image'));
+      els.clearHistoryBtn.addEventListener('click', () => clearHistory().catch(handleError));
       els.resultGrid.addEventListener('click', async (event) => {
         const button = event.target.closest('[data-copy]');
         if (!button) return;
@@ -1199,6 +1488,30 @@
           log('图片地址已复制。');
         }
       });
+      els.historyList.addEventListener('click', async (event) => {
+        const viewButton = event.target.closest('[data-history-view]');
+        const copyButton = event.target.closest('[data-history-copy]');
+        const deleteButton = event.target.closest('[data-history-delete]');
+        const id = viewButton?.dataset.historyView || copyButton?.dataset.historyCopy || deleteButton?.dataset.historyDelete;
+        if (!id) return;
+        const record = findHistoryRecord(id);
+        if (!record) return;
+        if (viewButton) {
+          renderResults(historyImages(record), { fromHistory: true });
+          return;
+        }
+        if (copyButton) {
+          const src = historyImages(record)[0] || '';
+          if (src) {
+            await navigator.clipboard.writeText(src);
+            log('历史图片地址已复制。');
+          }
+          return;
+        }
+        if (deleteButton) {
+          await deleteHistoryRecord(id);
+        }
+      });
     }
 
     loadSettings();
@@ -1206,6 +1519,7 @@
     renderModelSelect();
     setupDropzone();
     setupEvents();
+    loadHistory();
     loadModels();
   </script>
 </body>
