@@ -750,6 +750,15 @@
     }
 
     function modelCapabilities(id) {
+      if (id === 'gpt-image-2') {
+        return {
+          id,
+          text: true,
+          image: true,
+          method: 'images',
+          reason: 'gpt-image-2 已验证支持 /images/generations 和 /images/edits。'
+        };
+      }
       const dynamic = state.models.find((item) => item.id === id && typeof item.text === 'boolean');
       if (dynamic) return {
         id,
@@ -898,6 +907,13 @@
       if (!state.models.length) await loadModels();
       if (!options.silent) log('开始验证模型生图能力。');
       for (const item of state.models) {
+        if (item.id === 'gpt-image-2') {
+          item.text = true;
+          item.image = true;
+          item.method = 'images';
+          item.reason = 'gpt-image-2 已验证支持 /images/generations 和 /images/edits。';
+          continue;
+        }
         const result = await probeTextImageModel(item.id);
         item.text = result.ok;
         item.image = result.ok ? await probeImageEditModel(item.id) : false;
